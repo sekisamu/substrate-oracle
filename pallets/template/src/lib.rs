@@ -17,6 +17,8 @@ mod tests;
 pub trait Trait: frame_system::Trait {
 	/// Because this pallet emits events, it depends on the runtime's definition of an event.
 	type Event: From<Event<Self>> + Into<<Self as frame_system::Trait>::Event>;
+
+	type WhatIWantFromOracle: Get<u32>;
 }
 
 // The pallet's runtime storage items.
@@ -28,7 +30,7 @@ decl_storage! {
 	trait Store for Module<T: Trait> as TemplateModule {
 		// Learn more about declaring storage items:
 		// https://substrate.dev/docs/en/knowledgebase/runtime/storage#declaring-storage-items
-		Something get(fn something): Option<u32>;
+		pub Something get(fn something): Option<u32>;
 	}
 }
 
