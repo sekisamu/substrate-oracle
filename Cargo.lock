@@ -3106,6 +3106,7 @@ dependencies = [
  "pallet-aura",
  "pallet-balances",
  "pallet-grandpa",
+ "pallet-oracle",
  "pallet-randomness-collective-flip",
  "pallet-sudo",
  "pallet-template",
@@ -3275,18 +3276,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77af24da69f9d9341038eba93a073b1fdaaa1b788221b00a69bce9e762cb32de"
 
 [[package]]
-name = "oracle"
-version = "0.1.0"
-dependencies = [
- "frame-support 2.0.0-rc5 (git+https://github.com/paritytech/substrate.git)",
- "frame-system 2.0.0-rc5 (git+https://github.com/paritytech/substrate.git)",
- "parity-scale-codec",
- "sp-io 2.0.0-rc5 (git+https://github.com/paritytech/substrate.git)",
- "sp-runtime 2.0.0-rc5 (git+https://github.com/paritytech/substrate.git)",
- "sp-std 2.0.0-rc5 (git+https://github.com/paritytech/substrate.git)",
-]
-
-[[package]]
 name = "owning_ref"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3379,6 +3368,18 @@ dependencies = [
  "sp-session",
  "sp-staking",
  "sp-std 2.0.0-rc5 (git+https://github.com/paritytech/substrate.git?tag=v2.0.0-rc5)",
+]
+
+[[package]]
+name = "pallet-oracle"
+version = "0.1.0"
+dependencies = [
+ "frame-support 2.0.0-rc5 (git+https://github.com/paritytech/substrate.git)",
+ "frame-system 2.0.0-rc5 (git+https://github.com/paritytech/substrate.git)",
+ "parity-scale-codec",
+ "sp-io 2.0.0-rc5 (git+https://github.com/paritytech/substrate.git)",
+ "sp-runtime 2.0.0-rc5 (git+https://github.com/paritytech/substrate.git)",
+ "sp-std 2.0.0-rc5 (git+https://github.com/paritytech/substrate.git)",
 ]
 
 [[package]]
