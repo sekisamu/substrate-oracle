@@ -89,7 +89,7 @@ decl_module! {
 		pub fn register_storage_key(origin, key: Vec<u8>) {
 			// parse origin
 			// e.g. the key is b":Fxck:"
-			StorageKeys::mutate(|v| {
+			ActiveParamTypes::mutate(|v| {
 				if !v.contains(&key) {
 					v.push(key)
 				}
@@ -97,9 +97,9 @@ decl_module! {
 		}
     }
 }
-impl<T: Trait> Module<T> {
-	fn set_storage_value(key: Vec<u8>, value: Vec<u8>) {
-		// e.g. receive to set key b":Fxck:" in period end, value is u64.encode()
-		frame_support::storage::unhashed::put(&key, &value);
-	}
-}
+// impl<T: Trait> Module<T> {
+// 	fn set_storage_value(key: Vec<u8>, value: Vec<u8>) {
+// 		// e.g. receive to set key b":Fxck:" in period end, value is u64.encode()
+// 		frame_support::storage::unhashed::put(&key, &value);
+// 	}
+// }
