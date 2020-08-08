@@ -290,7 +290,7 @@ construct_runtime!(
 		Sudo: sudo::{Module, Call, Config<T>, Storage, Event<T>},
 		// Include the custom logic from the template pallet in the runtime.
 		TemplateModule: template::{Module, Call, Storage, Event<T>},
-		Orcale: pallet_oracle::{Module, Call, Storage, Event<T>},
+		Oracle: pallet_oracle::{Module, Call, Storage, Event<T>},
 	}
 );
 
