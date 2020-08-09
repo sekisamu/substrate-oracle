@@ -110,7 +110,7 @@ pub struct Info<BlockNumber> {
 
 const RING_BUF_LEN: usize = 8;
 
-use frame_support::traits::{EnsureOrigin, Contains};
+use frame_support::traits::{Contains, EnsureOrigin};
 use sp_std::{marker::PhantomData, prelude::*};
 
 pub struct DataFeedGet<Key: Get<[u8; 32]>, Value: Get<PrimitiveOracleType>>(
@@ -130,7 +130,7 @@ pub trait Trait: frame_system::Trait {
     type Event: From<Event<Self>> + Into<<Self as frame_system::Trait>::Event>;
 
     /// The origin that can schedule an update
-    type DispatchOrigin: EnsureOrigin<Self::Origin, Success=Self::AccountId>;
+    type DispatchOrigin: EnsureOrigin<Self::Origin, Success = Self::AccountId>;
 }
 
 decl_event!(
@@ -169,7 +169,7 @@ decl_storage! {
     }
 }
 
-impl<T: Trait> Contains<T::AccountId> for Module <T> {
+impl<T: Trait> Contains<T::AccountId> for Module<T> {
     fn sorted_members() -> Vec<T::AccountId> {
         Self::all_providers()
     }
@@ -213,6 +213,30 @@ decl_module! {
             Self::feed_data_impl(who, key, value)
         }
 
+        #[weight = 0]
+        pub fn add_provider(origin, new_one: <T::Lookup as StaticLookup>::Source) -> DispatchResult {
+            T::DispatchOrigin::try_origin(origin).map(|_| ()).or_else(ensure_root)?;
+            let new_one = T::Lookup::lookup(new_one)?;
+
+            ActiveProviders::<T>::mutate(|v| {
+                if !v.contains(&new_one) {
+                    v.push(new_one);
+                }
+            });
+            Ok(())
+        }
+
+        #[weight = 0]
+        pub fn remove_provider(origin, who: <T::Lookup as StaticLookup>::Source) -> DispatchResult {
+            T::DispatchOrigin::try_origin(origin).map(|_| ()).or_else(ensure_root)?;
+            let who = T::Lookup::lookup(who)?;
+
+            ActiveProviders::<T>::mutate(|v| {
+                v.retain(|accountid| accountid != &who);
+            });
+            Ok(())
+        }
+
         fn on_finalize(_n: T::BlockNumber) {
             for (key, info) in Infos::<T>::iter() {
                 if info.schedule % _n == Zero::zero() {
@@ -223,7 +247,11 @@ decl_module! {
     }
 }
 impl<T: Trait> Module<T> {
-    fn feed_data_impl(who: T::AccountId, key: StorageKey, value: PrimitiveOracleType) -> DispatchResult {
+    fn feed_data_impl(
+        who: T::AccountId,
+        key: StorageKey,
+        value: PrimitiveOracleType,
+    ) -> DispatchResult {
         if !Self::all_types().contains(&key) {
             Err(Error::<T>::InvalidKey)?
         }
@@ -237,9 +265,9 @@ impl<T: Trait> Module<T> {
                     let mut new_data = [Default::default(); RING_BUF_LEN];
                     new_data[0] = value;
                     // move data buf to new_data buf, and drop last item
-                    new_data[1..].copy_from_slice(&data[0.. (data.len() - 2)]);
+                    new_data[1..].copy_from_slice(&data[0..(data.len() - 2)]);
                     *data = new_data;
-                },
+                }
                 None => {
                     *data = Some([value; RING_BUF_LEN]);
                 }
