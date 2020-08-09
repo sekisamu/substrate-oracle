@@ -13,12 +13,17 @@ mod mock;
 #[cfg(test)]
 mod tests;
 
+use pallet_oracle::PrimitiveOracleType;
+
 /// Configure the pallet by specifying the parameters and types on which it depends.
 pub trait Trait: frame_system::Trait {
 	/// Because this pallet emits events, it depends on the runtime's definition of an event.
 	type Event: From<Event<Self>> + Into<<Self as frame_system::Trait>::Event>;
 
+	// second version
 	type WhatIWantFromOracle: Get<u32>;
+	// third version
+	type WhatIWantFromOracle2: Get<PrimitiveOracleType>;
 }
 
 // The pallet's runtime storage items.
@@ -30,7 +35,9 @@ decl_storage! {
 	trait Store for Module<T: Trait> as TemplateModule {
 		// Learn more about declaring storage items:
 		// https://substrate.dev/docs/en/knowledgebase/runtime/storage#declaring-storage-items
-		pub Something get(fn something): Option<u32>;
+		Something get(fn something): Option<u32>;
+
+		pub Something2 get(fn something2): Option<PrimitiveOracleType>;
 	}
 }
 
