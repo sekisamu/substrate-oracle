@@ -12,7 +12,8 @@ use sp_api::impl_runtime_apis;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{crypto::KeyTypeId, OpaqueMetadata};
 use sp_runtime::traits::{
-    BlakeTwo256, Block as BlockT, IdentifyAccount, IdentityLookup, NumberFor, Saturating, Verify,
+    self, BlakeTwo256, Block as BlockT, IdentifyAccount, IdentityLookup,
+    NumberFor, Saturating, Verify, SaturatedConversion, StaticLookup
 };
 use sp_runtime::{
     create_runtime_str, generic, impl_opaque_keys,
@@ -23,11 +24,11 @@ use sp_std::{marker::PhantomData, prelude::*};
 #[cfg(feature = "std")]
 use sp_version::NativeVersion;
 use sp_version::RuntimeVersion;
-
+use codec::{Encode, Decode};
 // A few exports that help ease life for downstream crates.
 pub use balances::Call as BalancesCall;
 pub use frame_support::{
-    construct_runtime, parameter_types,
+    construct_runtime, parameter_types, debug,
     traits::{Get, KeyOwnerProofSystem, Randomness},
     weights::{
         constants::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight, WEIGHT_PER_SECOND},
@@ -38,7 +39,7 @@ pub use frame_support::{
 #[cfg(any(feature = "std", test))]
 pub use sp_runtime::BuildStorage;
 pub use sp_runtime::{Perbill, Permill};
-use system::EnsureSignedBy;
+use system::{EnsureSignedBy, offchain::AppCrypto};
 pub use timestamp::Call as TimestampCall;
 
 /// Import the template pallet.
@@ -144,7 +145,7 @@ impl system::Trait for Runtime {
     /// The aggregated dispatch type that is available for extrinsics.
     type Call = Call;
     /// The lookup mechanism to get account ID from whatever is passed in dispatchers.
-    type Lookup = IdentityLookup<AccountId>;
+    type Lookup = Indices;
     /// The index type for storing how many extrinsics an account has signed.
     type Index = Index;
     /// The index type for blocks.
@@ -217,6 +218,18 @@ impl grandpa::Trait for Runtime {
 }
 
 parameter_types! {
+	pub const IndexDeposit: Balance = 10000;
+}
+
+impl indices::Trait for Runtime {
+    type AccountIndex = AccountIndex;
+    type Currency = Balances;
+    type Deposit = IndexDeposit;
+    type Event = Event;
+    type WeightInfo = ();
+}
+
+parameter_types! {
     pub const MinimumPeriod: u64 = SLOT_DURATION / 2;
 }
 
@@ -260,11 +273,74 @@ impl sudo::Trait for Runtime {
     type Call = Call;
 }
 
-/// Configure the pallet template in pallets/template.
-impl pallet_oracle::Trait for Runtime {
-    type Event = Event;
-    type DispatchOrigin = EnsureSignedBy<Oracle, AccountId>;
+impl<LocalCall> system::offchain::CreateSignedTransaction<LocalCall> for Runtime where
+    Call: From<LocalCall>,
+{
+    fn create_transaction<C: system::offchain::AppCrypto<Self::Public, Self::Signature>>(
+        call: Call,
+        public: <Signature as traits::Verify>::Signer,
+        account: AccountId,
+        nonce: Index,
+    ) -> Option<(Call, <UncheckedExtrinsic as traits::Extrinsic>::SignaturePayload)> {
+        // take the biggest period possible.
+        let period = BlockHashCount::get()
+            .checked_next_power_of_two()
+            .map(|c| c / 2)
+            .unwrap_or(2) as u64;
+        let current_block = System::block_number()
+            .saturated_into::<u64>()
+            // The `System::block_number` is initialized with `n+1`,
+            // so the actual block number is `n`.
+            .saturating_sub(1);
+        let tip = 0;
+        let extra: SignedExtra = (
+            system::CheckSpecVersion::<Runtime>::new(),
+            system::CheckTxVersion::<Runtime>::new(),
+            system::CheckGenesis::<Runtime>::new(),
+            system::CheckEra::<Runtime>::from(generic::Era::mortal(period, current_block)),
+            system::CheckNonce::<Runtime>::from(nonce),
+            system::CheckWeight::<Runtime>::new(),
+            transaction_payment::ChargeTransactionPayment::<Runtime>::from(tip),
+        );
+        let raw_payload = SignedPayload::new(call, extra).map_err(|e| {
+            debug::warn!("Unable to create signed payload: {:?}", e);
+        }).ok()?;
+        let signature = raw_payload.using_encoded(|payload| {
+            C::sign(payload, public)
+        })?;
+        let address = Indices::unlookup(account);
+        let (call, extra, _) = raw_payload.deconstruct();
+        Some((call, (address, signature.into(), extra)))
+    }
 }
+
+
+impl system::offchain::SigningTypes for Runtime {
+    type Public = <Signature as traits::Verify>::Signer;
+    type Signature = Signature;
+}
+
+impl<C> system::offchain::SendTransactionTypes<C> for Runtime where
+    Call: From<C>,
+{
+    type Extrinsic = UncheckedExtrinsic;
+    type OverarchingCall = Call;
+}
+
+pub struct OracleId;
+impl AppCrypto<<Signature as traits::Verify>::Signer, Signature> for OracleId {
+    type RuntimeAppPublic = pallet_oracle::crypto::AuthorityId;
+    type GenericSignature = sp_core::sr25519::Signature;
+    type GenericPublic = sp_core::sr25519::Public;
+}
+
+/// Configure the pallet template in pallets/template.
+//impl pallet_oracle::Trait for Runtime {
+//    type AuthorityId = OracleId;
+//    type Event = Event;
+//    type Call = Call;
+//    type DispatchOrigin = EnsureSignedBy<Oracle, AccountId>;
+//}
 
 parameter_types! {
     pub storage StorageArgument: pallet_oracle::PrimitiveOracleType = pallet_oracle::PrimitiveOracleType::U32(0);
@@ -301,6 +377,7 @@ construct_runtime!(
         System: system::{Module, Call, Config, Storage, Event<T>},
         RandomnessCollectiveFlip: randomness_collective_flip::{Module, Call, Storage},
         Timestamp: timestamp::{Module, Call, Storage, Inherent},
+        Indices: indices::{Module, Call, Storage, Event<T>},
         Aura: aura::{Module, Config<T>, Inherent},
         Grandpa: grandpa::{Module, Call, Storage, Config, Event},
         Balances: balances::{Module, Call, Storage, Config<T>, Event<T>},
@@ -308,12 +385,12 @@ construct_runtime!(
         Sudo: sudo::{Module, Call, Config<T>, Storage, Event<T>},
         // Include the custom logic from the template pallet in the runtime.
         TemplateModule: template::{Module, Call, Storage, Event<T>},
-        Oracle: pallet_oracle::{Module, Call, Storage, Event<T>},
+//        Oracle: pallet_oracle::{Module, Call, Storage, Event<T>},
     }
 );
 
 /// The address format for describing accounts.
-pub type Address = AccountId;
+pub type Address = <Indices as StaticLookup>::Source;
 /// Block header type as expected by this runtime.
 pub type Header = generic::Header<BlockNumber, BlakeTwo256>;
 /// Block type as expected by this runtime.
@@ -334,6 +411,8 @@ pub type SignedExtra = (
 );
 /// Unchecked extrinsic type as expected by this runtime.
 pub type UncheckedExtrinsic = generic::UncheckedExtrinsic<Address, Call, Signature, SignedExtra>;
+/// The payload being signed in transactions.
+pub type SignedPayload = generic::SignedPayload<Call, SignedExtra>;
 /// Extrinsic type that has already been checked.
 pub type CheckedExtrinsic = generic::CheckedExtrinsic<AccountId, Call, SignedExtra>;
 /// Executive: handles dispatch to the various modules.
@@ -449,3 +528,4 @@ impl_runtime_apis! {
         }
     }
 }
+

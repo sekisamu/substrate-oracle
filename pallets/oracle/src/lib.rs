@@ -4,54 +4,48 @@
 // which is how to convert JsonValue::number to PrimitiveOracleType
 
 use frame_support::{
-	debug, decl_error, decl_event, decl_module, decl_storage, dispatch, traits::Get,
+	debug, decl_error, decl_event, decl_module, decl_storage, traits::Get,
 	IterableStorageDoubleMap, IterableStorageMap,
 };
 use frame_system::{
 	ensure_root, ensure_signed,
 	offchain::{
-		AppCrypto, CreateSignedTransaction, SendSignedTransaction, SendUnsignedTransaction,
-		SignedPayload, Signer, SigningTypes, SubmitTransaction,
+		AppCrypto, CreateSignedTransaction, SendSignedTransaction,
+		Signer, SendTransactionTypes, SigningTypes
 	},
 };
 use sp_runtime::{
-	FixedU128, offchain::{http, storage::StorageValueRef, Duration},
-	transaction_validity::{
-		InvalidTransaction, TransactionPriority, TransactionSource, TransactionValidity,
-		ValidTransaction,
-	},
+	FixedU128, offchain::{http, Duration},
 };
+use sp_application_crypto::RuntimeAppPublic;
 use sp_core::crypto::KeyTypeId;
 use codec::{Decode, Encode};
 use lite_json::json::{JsonValue, NumberValue};
 use sp_runtime::{
-	curve::PiecewiseLinear,
 	traits::{
-		AtLeast32BitUnsigned, CheckedSub, Convert, Dispatchable, SaturatedConversion, Saturating,
 		StaticLookup, Zero,
 	},
-	DispatchError, DispatchResult, PerThing, PerU16, Percent, Permill, RuntimeDebug,
+	DispatchError, DispatchResult, RuntimeDebug,
 };
 use sp_std::{prelude::*, str::Chars, convert::TryInto};
+#[cfg(feature = "std")]
+use std::fmt;
 
 
 pub const KEY_TYPE: KeyTypeId = KeyTypeId(*b"orcl");
 
 pub mod crypto {
-	use super::KEY_TYPE;
+	use super::{KEY_TYPE, SigningTypes};
 	use sp_runtime::{
 		app_crypto::{app_crypto, sr25519},
 		traits::Verify,
 	};
 	use sp_core::sr25519::Signature as Sr25519Signature;
+	use frame_system::offchain::AppCrypto;
 	app_crypto!(sr25519, KEY_TYPE);
 
-	pub struct TestAuthId;
-	impl frame_system::offchain::AppCrypto<<Sr25519Signature as Verify>::Signer, Sr25519Signature> for TestAuthId {
-		type RuntimeAppPublic = Public;
-		type GenericSignature = sp_core::sr25519::Signature;
-		type GenericPublic = sp_core::sr25519::Public;
-	}
+	pub type AuthoritySignature = Signature;
+	pub type AuthorityId = Public;
 }
 
 
@@ -68,6 +62,18 @@ pub enum PrimitiveOracleType {
 	U32(u32),
 	FixedU128(FixedU128),
 }
+//
+//#[cfg(feature = "std")]
+//impl fmt::Display for PrimitiveOracleType {
+//	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+//		match self {
+//			PrimitiveOracleType::U8(n) => write!(f, "{:?}", n),
+//			PrimitiveOracleType::U16(n) => write!(f, "{:?}", n),
+//			PrimitiveOracleType::U32(n) => write!(f, "{:?}", n),
+//			PrimitiveOracleType::FixedU128(n) => write!(f, "{:?}", n),
+//		}
+//	}
+//}
 
 impl PrimitiveOracleType {
 	pub fn number_type(&self) -> NumberType {
@@ -166,7 +172,7 @@ decl_event!(
     where
         AccountId = <T as frame_system::Trait>::AccountId,
     {
-        SomethingStored(u32, AccountId),
+        NewData(AccountId, StorageKey, PrimitiveOracleType),
     }
 );
 
@@ -279,10 +285,14 @@ decl_module! {
         fn offchain_worker(block_number: T::BlockNumber) {
             debug::native::info!("Hello World from offchain workers!");
 
-            let res = Self::fetch_datas();
-            if let Err(e) = res {
-                debug::error!("Error: {}", e);
-            }
+			for key in Self::all_types() {
+				let res = Self::fetch_and_send_signed(&key);
+				if let Err(e) = res {
+					debug::error!("Error: {}", e);
+				}
+			}
+
+			// TODO: set conditions to calc
         }
     }
 }
@@ -299,7 +309,8 @@ impl<T: Trait> Module<T> {
 		if value.number_type() != info.number_type {
 			Err(Error::<T>::InvalidValue)?
 		}
-		DataFeeds::<T>::try_mutate_exists(key, who, |data| {
+		debug::info!("Feeding data to {:?}", key);
+		DataFeeds::<T>::try_mutate_exists(key.clone(), who.clone(), |data| {
 			match data {
 				Some(data) => {
 					let mut new_data = [Default::default(); RING_BUF_LEN];
@@ -312,8 +323,34 @@ impl<T: Trait> Module<T> {
 					*data = Some([value; RING_BUF_LEN]);
 				}
 			}
+			Self::deposit_event(RawEvent::NewData(who, key, value));
 			Ok(())
 		})
+	}
+
+	fn fetch_and_send_signed(storage_key: &StorageKey) -> Result<(), &'static str> {
+		let signer = Signer::<T, T::AuthorityId>::all_accounts();
+		if !signer.can_sign() {
+			return Err(
+				"No local accounts available. Consider adding one via `author_insertKey` RPC."
+			)?
+		}
+		let data = Self::fetch_data(storage_key).map_err(|_| "Failed to fetch data")?;
+
+		let results = signer.send_signed_transaction(
+			|_account| {
+				Call::feed_data(storage_key.to_vec(), data)
+			}
+		);
+
+		for (acc, res) in &results {
+			match res {
+				Ok(()) => debug::info!("[{:?}] Submitted data: {:?}", acc.id, data),
+				Err(e) => debug::error!("[{:?}] Failed to submit transaction: {:?}", acc.id, e),
+			}
+		}
+
+		Ok(())
 	}
 
 	fn calc(key: StorageKey, info: Info<T::BlockNumber>) {
@@ -338,10 +375,6 @@ impl<T: Trait> Module<T> {
 		frame_support::storage::unhashed::put(&key, &value);
 	}
 
-	fn fetch_datas() -> Result<(), &'static str> {
-		// todo get storage keys and call fetch_data
-		Ok(())
-	}
 
 	fn fetch_data(storage_key: &StorageKey) -> Result<PrimitiveOracleType, &'static str> {
 		// We want to keep the offchain worker execution time reasonable, so we set a hard-coded

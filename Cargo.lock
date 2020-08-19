@@ -3012,6 +3012,7 @@ dependencies = [
  "pallet-aura",
  "pallet-balances",
  "pallet-grandpa",
+ "pallet-indices",
  "pallet-oracle",
  "pallet-randomness-collective-flip",
  "pallet-sudo",
@@ -3277,6 +3278,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "pallet-indices"
+version = "2.0.0-rc5"
+source = "git+https://github.com/paritytech/substrate.git?tag=v2.0.0-rc5#e00d78cb1c354001d868fa66938a827a432dc530"
+dependencies = [
+ "frame-support",
+ "frame-system",
+ "parity-scale-codec",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
 name = "pallet-oracle"
 version = "0.1.0"
 dependencies = [
@@ -3284,6 +3299,7 @@ dependencies = [
  "frame-system",
  "lite-json",
  "parity-scale-codec",
+ "sp-application-crypto",
  "sp-core",
  "sp-io",
  "sp-runtime",
