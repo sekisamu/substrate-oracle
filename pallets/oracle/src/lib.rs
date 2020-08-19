@@ -11,13 +11,12 @@ use frame_system::{
 	ensure_root, ensure_signed,
 	offchain::{
 		AppCrypto, CreateSignedTransaction, SendSignedTransaction,
-		Signer, SendTransactionTypes, SigningTypes
+		Signer
 	},
 };
 use sp_runtime::{
 	FixedU128, offchain::{http, Duration},
 };
-use sp_application_crypto::RuntimeAppPublic;
 use sp_core::crypto::KeyTypeId;
 use codec::{Decode, Encode};
 use lite_json::json::{JsonValue, NumberValue};
@@ -28,20 +27,14 @@ use sp_runtime::{
 	DispatchError, DispatchResult, RuntimeDebug,
 };
 use sp_std::{prelude::*, str::Chars, convert::TryInto};
-#[cfg(feature = "std")]
-use std::fmt;
-
 
 pub const KEY_TYPE: KeyTypeId = KeyTypeId(*b"orcl");
 
 pub mod crypto {
-	use super::{KEY_TYPE, SigningTypes};
+	use super::KEY_TYPE;
 	use sp_runtime::{
 		app_crypto::{app_crypto, sr25519},
-		traits::Verify,
 	};
-	use sp_core::sr25519::Signature as Sr25519Signature;
-	use frame_system::offchain::AppCrypto;
 	app_crypto!(sr25519, KEY_TYPE);
 
 	pub type AuthoritySignature = Signature;
@@ -62,18 +55,7 @@ pub enum PrimitiveOracleType {
 	U32(u32),
 	FixedU128(FixedU128),
 }
-//
-//#[cfg(feature = "std")]
-//impl fmt::Display for PrimitiveOracleType {
-//	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-//		match self {
-//			PrimitiveOracleType::U8(n) => write!(f, "{:?}", n),
-//			PrimitiveOracleType::U16(n) => write!(f, "{:?}", n),
-//			PrimitiveOracleType::U32(n) => write!(f, "{:?}", n),
-//			PrimitiveOracleType::FixedU128(n) => write!(f, "{:?}", n),
-//		}
-//	}
-//}
+
 
 impl PrimitiveOracleType {
 	pub fn number_type(&self) -> NumberType {
