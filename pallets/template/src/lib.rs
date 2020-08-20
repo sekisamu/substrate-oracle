@@ -21,7 +21,7 @@ pub trait Trait: frame_system::Trait {
 	type Event: From<Event<Self>> + Into<<Self as frame_system::Trait>::Event>;
 
 	// second version
-	type WhatIWantFromOracle: Get<u32>;
+	type WhatIWantFromOracle: Get<u128>;
 	// third version
 	type WhatIWantFromOracle2: Get<PrimitiveOracleType>;
 }

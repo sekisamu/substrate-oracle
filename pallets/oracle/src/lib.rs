@@ -30,7 +30,7 @@ use lite_json::json::{JsonValue, NumberValue};
 use sp_core::crypto::KeyTypeId;
 use sp_runtime::{
     offchain::{http, Duration},
-    Either, FixedPointNumber, FixedU128, SaturatedConversion,
+    FixedPointNumber, FixedU128, SaturatedConversion,
 };
 use sp_runtime::{
     traits::{StaticLookup, Zero},
@@ -79,13 +79,10 @@ impl PrimitiveOracleType {
     pub fn from_number_value(val: NumberValue, target_type: NumberType) -> Option<Self> {
         match target_type {
             NumberType::U128 => {
-                let float_value = val.to_f64();
-                if float_value < 0f64 {
-                    // it's a negative number, do not accept
+                if val.integer < 0 {
                     return None;
                 }
-                let value = u128::from(float_value.trunc() as u64);
-                Some(PrimitiveOracleType::U128(value))
+                Some(PrimitiveOracleType::U128(val.integer as u128))
             }
             NumberType::FixedU128 => {
                 if val.integer < 0 {

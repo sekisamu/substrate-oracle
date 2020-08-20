@@ -288,18 +288,18 @@ impl pallet_oracle::Trait for Runtime {
 }
 
 parameter_types! {
-    pub storage StorageArgument: pallet_oracle::PrimitiveOracleType = pallet_oracle::PrimitiveOracleType::U32(0);
+    pub storage StorageArgument: pallet_oracle::PrimitiveOracleType = pallet_oracle::PrimitiveOracleType::U128(0);
 
     pub StorageKey: [u8; 32] = template::Something2::hashed_key();
-    pub const DefaultValue: pallet_oracle::PrimitiveOracleType = pallet_oracle::PrimitiveOracleType::U8(1);
+    pub const DefaultValue: pallet_oracle::PrimitiveOracleType = pallet_oracle::PrimitiveOracleType::U128(1);
 }
 
 pub struct SimpleDataFeedGet;
-impl Get<u32> for SimpleDataFeedGet {
-	fn get() -> u32 {
+impl Get<u128> for SimpleDataFeedGet {
+	fn get() -> u128 {
 		let data: pallet_oracle::PrimitiveOracleType = StorageArgument::get();
 		match data {
-			pallet_oracle::PrimitiveOracleType::U32(d) => d,
+			pallet_oracle::PrimitiveOracleType::U128(d) => d,
 			_ => 0, // return a default value
 		}
 	}
