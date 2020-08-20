@@ -16,7 +16,7 @@ use lite_json::json::{JsonValue, NumberValue};
 use sp_core::crypto::KeyTypeId;
 use sp_runtime::{
     offchain::{http, Duration},
-    Either, FixedI128, FixedPointNumber, FixedU128, SaturatedConversion,
+    Either, FixedPointNumber, FixedU128, SaturatedConversion,
 };
 use sp_runtime::{
     traits::{StaticLookup, Zero},
@@ -131,7 +131,7 @@ impl<BlockNumber> Info<BlockNumber> {
 
 const RING_BUF_LEN: usize = 8;
 
-use frame_support::traits::{Contains, EnsureOrigin, Len};
+use frame_support::traits::{Contains, EnsureOrigin};
 use sp_runtime::traits::{CheckedDiv, Saturating};
 use sp_std::{marker::PhantomData, prelude::*};
 
@@ -342,27 +342,29 @@ impl<T: Trait> Module<T> {
         Ok(())
     }
 
-    // fn calc_impl<N: Saturating + CheckedDiv + Zero + From<u128> + Copy>(numbers: &[N], op: Operations) -> N {
-    // 	match op {
-    // 		Operations::Sum => {
-    // 			let sum = numbers.iter().fold(N::zero(), |a, b| {
-    // 				a.saturating_add(*b)
-    // 			});
-    // 			sum
-    // 		}
-    // 		Operations::Average => {
-    // 			if numbers.is_empty() {
-    // 				N::zero()
-    // 			} else {
-    // 				let sum = numbers.iter().fold(N::zero(), |a, b| {
-    // 					a.saturating_add(*b)
-    // 				});
-    // 				let n = N::from(numbers.len() as u128);
-    // 				sum.checked_div(&n).unwrap_or(N::zero())
-    // 			}
-    // 		}
-    // 	}
-    // }
+    fn calc_impl<N: Saturating + CheckedDiv + Copy, F: FnOnce(usize) -> N>(
+        numbers: &[N],
+        zero: N,
+        convert: F,
+        op: Operations,
+    ) -> N {
+        match op {
+            Operations::Sum => {
+                let sum = numbers.iter().fold(zero, |a, b| a.saturating_add(*b));
+                sum
+            }
+            Operations::Average => {
+                if numbers.is_empty() {
+                    zero
+                } else {
+                    let sum = numbers.iter().fold(zero, |a, b| a.saturating_add(*b));
+                    // let n = N::from(numbers.len() as u128);
+                    let n = convert(numbers.len());
+                    sum.checked_div(&n).unwrap_or(zero)
+                }
+            }
+        }
+    }
 
     fn calc(key: StorageKey, info: Info<T::BlockNumber>) {
         // calc result would drain all old data
@@ -385,17 +387,7 @@ impl<T: Trait> Module<T> {
                     })
                     .collect::<Vec<u32>>();
 
-                let res = match info.operation {
-                    Operations::Sum => {
-                        let sum = numbers.iter().fold(0_u32, |a, b| a.saturating_add(*b));
-                        sum
-                    }
-                    Operations::Average => {
-                        let sum = numbers.iter().fold(0, |a, b| a.saturating_add(*b));
-                        // div 0 is safety
-                        sum.checked_div(numbers.len() as u32).unwrap_or(0)
-                    }
-                };
+                let res: u32 = Self::calc_impl(&numbers, 0_u32, |len| len as u32, info.operation);
                 PrimitiveOracleType::from_u32_value(res, info.number_type)
             }
             NumberType::FixedU128 => {
@@ -407,20 +399,12 @@ impl<T: Trait> Module<T> {
                     })
                     .collect::<Vec<FixedU128>>();
 
-                let res: FixedU128 = match info.operation {
-                    Operations::Sum => numbers
-                        .iter()
-                        .fold(FixedU128::zero(), |a, b| a.saturating_add(*b)),
-                    Operations::Average => {
-                        let sum = numbers
-                            .iter()
-                            .fold(FixedU128::zero(), |a, b| a.saturating_add(*b));
-                        // sum.saturating_div_int(2_u32) // can't do this
-                        let total = FixedU128::from(numbers.len() as u128);
-                        // div 0 is safety
-                        sum.checked_div(&total).unwrap_or(FixedU128::zero())
-                    }
-                };
+                let res = Self::calc_impl(
+                    &numbers,
+                    FixedU128::zero(),
+                    |len| FixedU128::from(len as u128),
+                    info.operation,
+                );
                 PrimitiveOracleType::FixedU128(res)
             }
         };
