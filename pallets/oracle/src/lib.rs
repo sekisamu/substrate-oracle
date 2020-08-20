@@ -1,7 +1,21 @@
-#![cfg_attr(not(feature = "std"), no_std)]
+//! # General Oracle Module
+//!
+//! This module is designed for a general oracle purpose, to make oracle a
+//! User-friendly service for those who do not have in-depth knowledge of the
+//! offchain worker. With this pallet, you can fetch the offchain data and feed it
+//! back onto blockchain and modify some specific runtime storage.
+//!
+//! ## Overview
+//! In this oracle pallet, we can specify a very limited set of storage keys and
+//! data providers(also very limited set). Only a permitted account(listed in the
+//! provider set) is allowed to feed data onto the chain, through offchain worker.
+//!
+//! These fetched data will be used to modify the value under the specified storage
+//! key after some operations.
+//!
+//! This module is still a work in progress. It will support more types later.
 
-// TODO: we need to figure out the key function here
-// which is how to convert JsonValue::number to PrimitiveOracleType
+#![cfg_attr(not(feature = "std"), no_std)]
 
 use codec::{Decode, Encode};
 use frame_support::{
@@ -39,14 +53,17 @@ pub mod crypto {
     pub type AuthorityId = Public;
 }
 
+/// The operation type that specifies how we calculate the data
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Encode, Decode, RuntimeDebug)]
 pub enum Operations {
     Average,
     Sum,
 }
 
+/// A "generic" numeric data type
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Encode, Decode, RuntimeDebug)]
 pub enum PrimitiveOracleType {
+	/// unsigned
     U128(u128),
     FixedU128(FixedU128),
 }
