@@ -22,7 +22,11 @@ use sp_runtime::{
     traits::{StaticLookup, Zero},
     DispatchError, DispatchResult, RuntimeDebug,
 };
-use sp_std::{convert::TryInto, prelude::*, str::Chars};
+use sp_std::{
+    convert::{TryFrom, TryInto},
+    prelude::*,
+    str::Chars,
+};
 
 pub const KEY_TYPE: KeyTypeId = KeyTypeId(*b"orcl");
 
@@ -43,68 +47,67 @@ pub enum Operations {
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Encode, Decode, RuntimeDebug)]
 pub enum PrimitiveOracleType {
-    U8(u8),
-    U16(u16),
-    U32(u32),
+    U128(u128),
     FixedU128(FixedU128),
-}
-
-impl PrimitiveOracleType {
-    pub fn to_number(self) -> Either<u32, FixedU128> {
-        match self {
-            PrimitiveOracleType::U8(a) => Either::Left(a as u32),
-            PrimitiveOracleType::U16(a) => Either::Left(a as u32),
-            PrimitiveOracleType::U32(a) => Either::Left(a),
-            PrimitiveOracleType::FixedU128(a) => Either::Right(a),
-        }
-    }
 }
 
 impl PrimitiveOracleType {
     pub fn number_type(&self) -> NumberType {
         match self {
-            PrimitiveOracleType::U8(_) => NumberType::U8,
-            PrimitiveOracleType::U16(_) => NumberType::U16,
-            PrimitiveOracleType::U32(_) => NumberType::U32,
+            PrimitiveOracleType::U128(_) => NumberType::U128,
             PrimitiveOracleType::FixedU128(_) => NumberType::FixedU128,
         }
     }
 
     pub fn from_number_value(val: NumberValue, target_type: NumberType) -> Option<Self> {
         match target_type {
-            // TODO: handle overflow/underflow error here
-            NumberType::U8 => Some(PrimitiveOracleType::U8(val.integer.try_into().unwrap())),
-            NumberType::U16 => Some(PrimitiveOracleType::U16(val.integer.try_into().unwrap())),
-            NumberType::U32 => Some(PrimitiveOracleType::U32(val.integer.try_into().unwrap())),
-            NumberType::FixedU128 => Some(PrimitiveOracleType::FixedU128(FixedU128::from((
-                val.integer * 10i64.pow(val.fraction_length + val.exponent as u32)
-                    + (val.fraction as i64).pow(val.exponent as u32),
-                10i64.pow(val.fraction_length),
-            )))),
-        }
-    }
-
-    pub fn from_u32_value(val: u32, target_type: NumberType) -> Self {
-        match target_type {
-            NumberType::U8 => PrimitiveOracleType::U8(val.saturated_into()),
-            NumberType::U16 => PrimitiveOracleType::U16(val.saturated_into()),
-            NumberType::U32 => PrimitiveOracleType::U32(val.saturated_into()),
-            NumberType::FixedU128 => PrimitiveOracleType::FixedU128((val as u128).into()),
+            NumberType::U128 => {
+                let float_value = val.to_f64();
+                if float_value < 0f64 {
+                    // it's a negative number, do not accept
+                    return None;
+                }
+                let value = u128::from(float_value.trunc() as u64);
+                Some(PrimitiveOracleType::U128(value))
+            }
+            NumberType::FixedU128 => {
+                if val.integer < 0 {
+                    return None;
+                }
+                let decimal_point = -(val.fraction_length as i32) + val.exponent;
+                let (n, d) = if decimal_point >= 0 {
+                    // e.g. 1.35 * 10^3
+                    // integer part is (1 * 10^2 + 35) * 10^(-2+3)
+                    // decimal part is 1
+                    let n = (val.integer * 10_i64.pow(val.fraction_length) + val.fraction as i64)
+                        * 10_i64.pow(decimal_point as u32);
+                    let d = 1;
+                    (n, d)
+                } else {
+                    // e.g. 1.35 * 10^-2
+                    // integer part is (1 * 10^2 + 35)
+                    // decimal part is 10^(|-2-2|)
+                    let n = val.integer * 10_i64.pow(val.fraction_length) + val.fraction as i64;
+                    // let d = decimal_point.abs();
+                    let d = 10_i64.pow(decimal_point.abs() as u32);
+                    (n, d)
+                };
+                let res = FixedU128::from((n, d));
+                Some(PrimitiveOracleType::FixedU128(res))
+            }
         }
     }
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Encode, Decode, RuntimeDebug)]
 pub enum NumberType {
-    U8,
-    U16,
-    U32,
+    U128,
     FixedU128,
 }
 
 impl Default for PrimitiveOracleType {
     fn default() -> Self {
-        PrimitiveOracleType::U8(0)
+        PrimitiveOracleType::U128(0)
     }
 }
 
@@ -378,24 +381,26 @@ impl<T: Trait> Module<T> {
         // let type_ = info.number_type;
 
         let result = match info.number_type {
-            NumberType::U32 | NumberType::U8 | NumberType::U16 => {
+            NumberType::U128 => {
                 let numbers = data
                     .into_iter()
-                    .filter_map(|num: PrimitiveOracleType| match num.to_number() {
-                        Either::Left(a) => Some(a),
-                        Either::Right(_) => None,
+                    .filter_map(|num: PrimitiveOracleType| match num {
+                        PrimitiveOracleType::U128(a) => Some(a),
+                        PrimitiveOracleType::FixedU128(_) => None,
                     })
-                    .collect::<Vec<u32>>();
+                    .collect::<Vec<u128>>();
 
-                let res: u32 = Self::calc_impl(&numbers, 0_u32, |len| len as u32, info.operation);
-                PrimitiveOracleType::from_u32_value(res, info.number_type)
+                let res: u128 =
+                    Self::calc_impl(&numbers, 0_u128, |len| len as u128, info.operation);
+                // PrimitiveOracleType::from_u32_value(res, info.number_type)
+                PrimitiveOracleType::U128(res)
             }
             NumberType::FixedU128 => {
                 let numbers = data
                     .into_iter()
-                    .filter_map(|num: PrimitiveOracleType| match num.to_number() {
-                        Either::Left(_) => None,
-                        Either::Right(a) => Some(a),
+                    .filter_map(|num: PrimitiveOracleType| match num {
+                        PrimitiveOracleType::U128(_) => None,
+                        PrimitiveOracleType::FixedU128(a) => Some(a),
                     })
                     .collect::<Vec<FixedU128>>();
 
