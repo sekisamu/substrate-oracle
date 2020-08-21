@@ -42,6 +42,7 @@ use sp_std::{
     str::Chars,
 };
 
+/// The identifier for oracle-specific crypto keys
 pub const KEY_TYPE: KeyTypeId = KeyTypeId(*b"orcl");
 
 pub mod crypto {
@@ -60,7 +61,9 @@ pub enum Operations {
     Sum,
 }
 
-/// A "generic" numeric data type
+/// A "generic" numeric data type, which can be used in other pallets
+/// as a storage value. `lite_json:json::NumberValue` can be converted into
+/// PrimitiveOracleType with helper functions.
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Encode, Decode, RuntimeDebug)]
 pub enum PrimitiveOracleType {
 	/// unsigned
@@ -113,6 +116,7 @@ impl PrimitiveOracleType {
     }
 }
 
+/// Types of PrimitiveOracleType
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Encode, Decode, RuntimeDebug)]
 pub enum NumberType {
     U128,
@@ -180,16 +184,19 @@ decl_event!(
     pub enum Event<T>
     where
         AccountId = <T as frame_system::Trait>::AccountId,
-    {
+    {   /// New data stored on blokchain
         NewData(AccountId, StorageKey, PrimitiveOracleType),
     }
 );
 
-// Errors inform users that something went wrong.
+/// Errors inform users that something went wrong.
 decl_error! {
     pub enum Error for Module<T: Trait> {
+        /// If the storage key already registered
         ExistedKey,
+        /// You can not put data under the key that is not registered
         InvalidKey,
+        /// If the data type does not match the one specified in Infos
         InvalidValue,
     }
 }
@@ -199,12 +206,17 @@ decl_storage! {
     // This name may be updated, but each pallet in the runtime must use a unique name.
     // ---------------------------------vvvvvvvvvvvvvv
     trait Store for Module<T: Trait> as Oracle {
+        /// A set of storage keys
+        /// A storage key in this set refers to a storage value in other pallets,
         pub ActiveParamTypes get(fn all_types): Vec<StorageKey>;
 
+        /// A set of accounts
+        /// Only those in this set are allowed to feed data onto the chain
         pub ActiveProviders get(fn all_providers): Vec<T::AccountId>;
 
         // pub LastUpdated get(fn last_updated): hasher(twox_64_concat) StorageKey => T::BlockNumebr;
 
+        ///
         pub Infos get(fn infos): map hasher(twox_64_concat) StorageKey => Option<Info<T::BlockNumber>>;
 
         /// permissioned URL that could be used to fetch data
@@ -285,7 +297,7 @@ decl_module! {
 
         fn on_finalize(_n: T::BlockNumber) {
             for (key, info) in Infos::<T>::iter() {
-                if info.schedule % _n == Zero::zero() {
+                if  _n % info.schedule == Zero::zero() {
                     Self::calc(key, info);
                 }
             }
