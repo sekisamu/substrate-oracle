@@ -8,12 +8,24 @@
 //! ## Overview
 //! In this oracle pallet, we can specify a very limited set of storage keys and
 //! data providers(also very limited set). Only a permitted account(listed in the
-//! provider set) is allowed to feed data onto the chain, through offchain worker.
+//! provider set) is allowed to feed data onto the chain.
 //!
 //! These fetched data will be used to modify the value under the specified storage
 //! key after some operations.
 //!
 //! This module is still a work in progress. It will support more types later.
+//!
+//! ### Dispatchable Functions
+//!
+//! * `register_storage_key` - Register a storage key whose value can be modified within
+//!     oracle pallet.
+//! * `remove_storage_key` - Remove a storage key whose value can no longer be touched by
+//!    oracle pallet.
+//! * `set_url` - Set a url under a specific key whose value can be querried from
+//! * `feed_data` - Submit a piece of data on chain with a signed transaction
+//! * `add_provider` - Add a whitelisted account that is able to submit data on chain
+//! * `remove_provider` - An account removed from the whitelist still can submit data on chain
+//!     but his data is no longer valid when calculating.
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
