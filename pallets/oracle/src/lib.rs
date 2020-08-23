@@ -19,8 +19,8 @@
 
 use codec::{Decode, Encode};
 use frame_support::{
-    debug, decl_error, decl_event, decl_module, decl_storage, traits::Get,
-    IterableStorageDoubleMap, IterableStorageMap,
+    debug, decl_error, decl_event, decl_module, decl_storage, ensure,
+    traits::Get, IterableStorageDoubleMap, IterableStorageMap,
 };
 use frame_system::{
     ensure_root, ensure_signed,
@@ -42,16 +42,31 @@ use sp_std::{
     str::Chars,
 };
 
+#[cfg(test)]
+mod tests;
+
 /// The identifier for oracle-specific crypto keys
 pub const KEY_TYPE: KeyTypeId = KeyTypeId(*b"orcl");
 
 pub mod crypto {
     use super::KEY_TYPE;
-    use sp_runtime::app_crypto::{app_crypto, sr25519};
+    use sp_runtime::
+        {app_crypto::{app_crypto, sr25519},
+        traits::Verify,
+    };
     app_crypto!(sr25519, KEY_TYPE);
 
     pub type AuthoritySignature = Signature;
     pub type AuthorityId = Public;
+
+    /// For testing
+    use sp_core::sr25519::Signature as Sr25519Signature;
+    pub struct TestAuthId;
+    impl frame_system::offchain::AppCrypto<<Sr25519Signature as Verify>::Signer, Sr25519Signature> for TestAuthId {
+        type RuntimeAppPublic = AuthorityId;
+        type GenericSignature = sp_core::sr25519::Signature;
+        type GenericPublic = sp_core::sr25519::Public;
+    }
 }
 
 /// The operation type that specifies how we calculate the data
@@ -198,6 +213,8 @@ decl_error! {
         InvalidKey,
         /// If the data type does not match the one specified in Infos
         InvalidValue,
+        /// user is not allowed to feed data onto the blockchain
+        NotAllowed,
     }
 }
 
@@ -208,13 +225,11 @@ decl_storage! {
     trait Store for Module<T: Trait> as Oracle {
         /// A set of storage keys
         /// A storage key in this set refers to a storage value in other pallets,
-        pub ActiveParamTypes get(fn all_types): Vec<StorageKey>;
+        pub ActiveParamTypes get(fn all_keys): Vec<StorageKey>;
 
         /// A set of accounts
         /// Only those in this set are allowed to feed data onto the chain
         pub ActiveProviders get(fn all_providers): Vec<T::AccountId>;
-
-        // pub LastUpdated get(fn last_updated): hasher(twox_64_concat) StorageKey => T::BlockNumebr;
 
         ///
         pub Infos get(fn infos): map hasher(twox_64_concat) StorageKey => Option<Info<T::BlockNumber>>;
@@ -222,7 +237,7 @@ decl_storage! {
         /// permissioned URL that could be used to fetch data
         pub Url get(fn url): map hasher(twox_64_concat) StorageKey => Option<Vec<u8>>;
 
-        pub DataFeeds get(fn member_score): double_map hasher(blake2_128_concat) StorageKey,
+        pub DataFeeds get(fn feeded_data): double_map hasher(blake2_128_concat) StorageKey,
             hasher(blake2_128_concat) T::AccountId => Option<[PrimitiveOracleType; RING_BUF_LEN]>;
     }
 }
@@ -238,6 +253,8 @@ decl_module! {
         // Events must be initialized if they are used by the pallet.
         fn deposit_event() = default;
 
+        /// Register a storage key under which the value can be modified
+        /// by this oracle pallet with some rules
         #[weight = 0]
         pub fn register_storage_key(origin, key: StorageKey, info: Info<T::BlockNumber>) -> DispatchResult {
             T::DispatchOrigin::try_origin(origin).map(|_| ()).or_else(ensure_root)?;
@@ -253,6 +270,8 @@ decl_module! {
             Ok(())
         }
 
+        /// remove the storage key from the limited set so the oracle pallet no longer
+        /// can change the corresponding value afterwards.
         #[weight = 0]
         pub fn remove_storage_key(origin, key: StorageKey) -> DispatchResult {
             T::DispatchOrigin::try_origin(origin).map(|_| ()).or_else(ensure_root)?;
@@ -265,6 +284,14 @@ decl_module! {
             Ok(())
         }
 
+        #[weight = 0]
+        pub fn set_url(origin, key: StorageKey, url: Vec<u8>) -> DispatchResult {
+            T::DispatchOrigin::try_origin(origin).map(|_| ()).or_else(ensure_root)?;
+            Url::insert(&key, url);
+            Ok(())
+        }
+
+        /// Submit a new data under the specific storage key.
         #[weight = 0]
         pub fn feed_data(origin, key: StorageKey, value: PrimitiveOracleType) -> DispatchResult {
             let who = ensure_signed(origin)?;
@@ -304,9 +331,9 @@ decl_module! {
         }
 
         fn offchain_worker(block_number: T::BlockNumber) {
-            debug::native::info!("Hello World from offchain workers!");
+            debug::native::info!("Initialize offchain workers!");
 
-            for key in Self::all_types() {
+            for key in Self::all_keys() {
                 let res = Self::fetch_and_send_signed(&key);
                 if let Err(e) = res {
                     debug::error!("Error: {}", e);
@@ -323,7 +350,7 @@ impl<T: Trait> Module<T> {
         key: StorageKey,
         value: PrimitiveOracleType,
     ) -> DispatchResult {
-        if !Self::all_types().contains(&key) {
+        if !Self::all_keys().contains(&key) {
             Err(Error::<T>::InvalidKey)?
         }
         let info: Info<_> = Self::infos(&key).ok_or(Error::<T>::InvalidKey)?;
@@ -356,7 +383,7 @@ impl<T: Trait> Module<T> {
                 "No local accounts available. Consider adding one via `author_insertKey` RPC.",
             )?;
         }
-        let data = Self::fetch_data(storage_key).map_err(|_| "Failed to fetch data")?;
+        let data = Self::fetch_data(storage_key)?;
 
         let results =
             signer.send_signed_transaction(|_account| Call::feed_data(storage_key.to_vec(), data));
@@ -404,7 +431,6 @@ impl<T: Trait> Module<T> {
                 }
                 src
             });
-        // let type_ = info.number_type;
 
         let result = match info.number_type {
             NumberType::U128 => {

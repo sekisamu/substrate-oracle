@@ -19,11 +19,6 @@ use pallet_oracle::PrimitiveOracleType;
 pub trait Trait: frame_system::Trait {
 	/// Because this pallet emits events, it depends on the runtime's definition of an event.
 	type Event: From<Event<Self>> + Into<<Self as frame_system::Trait>::Event>;
-
-	// second version
-	type WhatIWantFromOracle: Get<u128>;
-	// third version
-	type WhatIWantFromOracle2: Get<PrimitiveOracleType>;
 }
 
 // The pallet's runtime storage items.
@@ -36,7 +31,7 @@ decl_storage! {
 		// Learn more about declaring storage items:
 		// https://substrate.dev/docs/en/knowledgebase/runtime/storage#declaring-storage-items
 		Something get(fn something): Option<u32>;
-
+		// can be modified by the oracle
 		pub Something2 get(fn something2): Option<PrimitiveOracleType>;
 	}
 }

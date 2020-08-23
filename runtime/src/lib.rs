@@ -294,22 +294,10 @@ parameter_types! {
     pub const DefaultValue: pallet_oracle::PrimitiveOracleType = pallet_oracle::PrimitiveOracleType::U128(1);
 }
 
-pub struct SimpleDataFeedGet;
-impl Get<u128> for SimpleDataFeedGet {
-	fn get() -> u128 {
-		let data: pallet_oracle::PrimitiveOracleType = StorageArgument::get();
-		match data {
-			pallet_oracle::PrimitiveOracleType::U128(d) => d,
-			_ => 0, // return a default value
-		}
-	}
-}
 
 /// Configure the pallet template in pallets/template.
 impl template::Trait for Runtime {
     type Event = Event;
-	type WhatIWantFromOracle = SimpleDataFeedGet;
-	type WhatIWantFromOracle2 = pallet_oracle::DataFeedGet<StorageKey, DefaultValue>;
 }
 impl<LocalCall> frame_system::offchain::CreateSignedTransaction<LocalCall> for Runtime where
     Call: From<LocalCall>,
