@@ -167,6 +167,7 @@ fn should_submit_signed_data_on_chain() {
 		Oracle::fetch_and_send_signed(
 			&<pallet_template::Something2>::hashed_key().to_vec()
 		).unwrap();
+
 		let tx = pool_state.write().transactions.pop().unwrap();
 		assert!(pool_state.read().transactions.is_empty());
 		let tx = Extrinsic::decode(&mut &*tx).unwrap();
@@ -176,7 +177,10 @@ fn should_submit_signed_data_on_chain() {
 			super::PrimitiveOracleType::FixedU128(FixedU128::from((156, 100)))
 		));
 
-		assert!(Template::something2().is_some());
+		System::set_block_number(2);
+		Oracle::on_finalize(System::block_number());
+
+		assert_eq!(Template::something2().unwrap().into_fixed_u128(), Some(FixedU128::from((156, 100))));
 	});
 
 
@@ -207,10 +211,6 @@ pub fn register_info() {
 			"https://min-api.cryptocompare.com/data/price?fsym=BTC&tsyms=USD".as_bytes().to_vec()
 		)
 	);
-
-	System::set_block_number(2);
-	Oracle::on_finalize(System::block_number());
-
 }
 
 

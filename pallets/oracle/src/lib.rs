@@ -106,6 +106,14 @@ impl PrimitiveOracleType {
         }
     }
 
+    pub fn into_fixed_u128(self) -> Option<FixedU128> {
+        match self {
+            PrimitiveOracleType::FixedU128(f) => Some(f),
+            _ => None,
+        }
+
+    }
+
     pub fn from_number_value(val: NumberValue, target_type: NumberType) -> Option<Self> {
         match target_type {
             NumberType::U128 => {
