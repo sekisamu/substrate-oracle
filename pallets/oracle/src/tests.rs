@@ -157,10 +157,10 @@ fn should_submit_signed_data_on_chain() {
 	t.execute_with(|| {
 		register_info();
 
-		Oracle::add_provider(
-			Origin::signed(AccountId::default()),
+		assert_ok!(Oracle::add_provider(
+			frame_system::RawOrigin::Root.into(),
 			public_key
-		);
+		));
 
 		assert!(Oracle::all_providers().contains(&public_key));
 
@@ -176,6 +176,13 @@ fn should_submit_signed_data_on_chain() {
 			<pallet_template::Something2>::hashed_key().to_vec(),
 			super::PrimitiveOracleType::FixedU128(FixedU128::from((156, 100)))
 		));
+		let (k, data) = match tx.call {
+			Call::feed_data(a, b) => (a, b),
+			_ => unreachable!("")
+		};
+
+		// execute call
+		Oracle::feed_data(frame_system::RawOrigin::Signed(public_key).into(), k, data).unwrap();
 
 		System::set_block_number(2);
 		Oracle::on_finalize(System::block_number());
@@ -198,7 +205,7 @@ pub fn register_info() {
 
 	assert_ok!(
 		Oracle::register_storage_key(
-			Origin::signed(AccountId::default()),
+			frame_system::RawOrigin::Root.into(),
 			<pallet_template::Something2>::hashed_key().to_vec(),
 			data_info
 		)
