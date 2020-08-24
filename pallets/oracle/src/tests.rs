@@ -74,6 +74,7 @@ impl frame_system::Trait for Test {
 
 impl pallet_template::Trait for Test {
 	type Event = TestEvent;
+	type WhatIWantFromOracle = super::PrimitiveOracleType;
 }
 
 type Extrinsic = TestXt<Call<Test>, ()>;
@@ -165,7 +166,7 @@ fn should_submit_signed_data_on_chain() {
 		assert!(Oracle::all_providers().contains(&public_key));
 
 		Oracle::fetch_and_send_signed(
-			&<pallet_template::Something2>::hashed_key().to_vec()
+			&<pallet_template::Something2<Test>>::hashed_key().to_vec()
 		).unwrap();
 
 		let tx = pool_state.write().transactions.pop().unwrap();
@@ -173,7 +174,7 @@ fn should_submit_signed_data_on_chain() {
 		let tx = Extrinsic::decode(&mut &*tx).unwrap();
 		assert_eq!(tx.signature.unwrap().0, 0);
 		assert_eq!(tx.call, Call::feed_data(
-			<pallet_template::Something2>::hashed_key().to_vec(),
+			<pallet_template::Something2<Test>>::hashed_key().to_vec(),
 			super::PrimitiveOracleType::FixedU128(FixedU128::from((156, 100)))
 		));
 		let (k, data) = match tx.call {
@@ -206,7 +207,7 @@ pub fn register_info() {
 	assert_ok!(
 		Oracle::register_storage_key(
 			frame_system::RawOrigin::Root.into(),
-			<pallet_template::Something2>::hashed_key().to_vec(),
+			<pallet_template::Something2<Test>>::hashed_key().to_vec(),
 			data_info
 		)
 	);
@@ -214,7 +215,7 @@ pub fn register_info() {
 	assert_ok!(
 		Oracle::set_url(
 			Origin::signed(AccountId::default()),
-			<pallet_template::Something2>::hashed_key().to_vec(),
+			<pallet_template::Something2<Test>>::hashed_key().to_vec(),
 			"https://min-api.cryptocompare.com/data/price?fsym=BTC&tsyms=USD".as_bytes().to_vec()
 		)
 	);

@@ -287,17 +287,11 @@ impl pallet_oracle::Trait for Runtime {
     type DispatchOrigin = EnsureSignedBy<Oracle, AccountId>;
 }
 
-parameter_types! {
-    pub storage StorageArgument: pallet_oracle::PrimitiveOracleType = pallet_oracle::PrimitiveOracleType::U128(0);
-
-    pub StorageKey: [u8; 32] = template::Something2::hashed_key();
-    pub const DefaultValue: pallet_oracle::PrimitiveOracleType = pallet_oracle::PrimitiveOracleType::U128(1);
-}
-
 
 /// Configure the pallet template in pallets/template.
 impl template::Trait for Runtime {
     type Event = Event;
+    type WhatIWantFromOracle = pallet_oracle::PrimitiveOracleType;
 }
 impl<LocalCall> frame_system::offchain::CreateSignedTransaction<LocalCall> for Runtime where
     Call: From<LocalCall>,

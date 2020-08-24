@@ -98,6 +98,19 @@ pub enum PrimitiveOracleType {
     FixedU128(FixedU128),
 }
 
+impl From<u128> for PrimitiveOracleType {
+    fn from(n: u128) -> Self {
+        PrimitiveOracleType::U128(n)
+    }
+}
+
+impl From<FixedU128> for PrimitiveOracleType {
+    fn from(f: FixedU128) -> Self {
+        PrimitiveOracleType::FixedU128(f)
+    }
+}
+
+
 impl PrimitiveOracleType {
     pub fn number_type(&self) -> NumberType {
         match self {
@@ -248,10 +261,13 @@ decl_storage! {
         pub ActiveParamTypes get(fn all_keys): Vec<StorageKey>;
 
         /// A set of accounts
-        /// Only those in this set are allowed to feed data onto the chain
+        /// Any one can submit data on chain, while only the data submitted by
+        /// the provider in this set is valid, and will be calculated later.
         pub ActiveProviders get(fn all_providers): Vec<T::AccountId>;
 
-        ///
+        /// Data Attributes.
+        /// It defines the type of the data, how to extract the data we want
+        /// from a json blob
         pub Infos get(fn infos): map hasher(twox_64_concat) StorageKey => Option<Info<T::BlockNumber>>;
 
         /// permissioned URL that could be used to fetch data

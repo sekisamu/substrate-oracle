@@ -4,21 +4,21 @@
 /// Learn more about FRAME and the core library of Substrate FRAME pallets:
 /// https://substrate.dev/docs/en/knowledgebase/runtime/frame
 
-use frame_support::{decl_module, decl_storage, decl_event, decl_error, dispatch, traits::Get};
+use frame_support::{decl_module, decl_storage, decl_event, decl_error, Parameter, dispatch, traits::Get};
 use frame_system::ensure_signed;
-
+use sp_runtime::FixedU128;
 #[cfg(test)]
 mod mock;
 
 #[cfg(test)]
 mod tests;
 
-use pallet_oracle::PrimitiveOracleType;
-
 /// Configure the pallet by specifying the parameters and types on which it depends.
 pub trait Trait: frame_system::Trait {
 	/// Because this pallet emits events, it depends on the runtime's definition of an event.
 	type Event: From<Event<Self>> + Into<<Self as frame_system::Trait>::Event>;
+
+	type WhatIWantFromOracle: Parameter + From<u128> + From<FixedU128>;
 }
 
 // The pallet's runtime storage items.
@@ -32,7 +32,7 @@ decl_storage! {
 		// https://substrate.dev/docs/en/knowledgebase/runtime/storage#declaring-storage-items
 		Something get(fn something): Option<u32>;
 		// can be modified by the oracle
-		pub Something2 get(fn something2): Option<PrimitiveOracleType>;
+		pub Something2 get(fn something2): Option<T::WhatIWantFromOracle>;
 	}
 }
 
