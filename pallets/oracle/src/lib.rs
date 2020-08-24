@@ -446,11 +446,16 @@ impl<T: Trait> Module<T> {
         // calc result would drain all old data
         let data: Vec<PrimitiveOracleType> =
             DataFeeds::<T>::drain_prefix(&key).fold(Vec::new(), |mut src, (who, datas)| {
+                // filter if account not in providers now
                 if Self::all_providers().contains(&who) {
                     src.extend(&datas);
                 }
                 src
             });
+        if data.is_empty() {
+            debug::warn!("do not receive data feed from outside for this key: {:?}", key);
+            return;
+        }
 
         let result = match info.number_type {
             NumberType::U128 => {
